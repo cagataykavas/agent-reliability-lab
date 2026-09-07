@@ -44,6 +44,8 @@ This repository turns those questions into executable evaluation contracts.
 | Regression analysis | paired baseline/candidate deltas with case-level regression detection |
 | Fault injection | seven deterministic corruption modes for evaluation-suite validation |
 | Portability | dependency-free core, installable CLI, Docker image, Python 3.11–3.13 CI |
+| Run registry | immutable UUID runs, dataset fingerprints and SQLite persistence |
+| Evaluation API | FastAPI create/list/detail endpoints with validated request contracts |
 
 ## Architecture
 
@@ -207,6 +209,47 @@ agent-reliability-compare \
 
 The comparison fails with a non-zero exit when the candidate omits baseline cases, exceeds allowed mean/pass-rate drops or regresses more individual cases than policy permits. This makes agent behavior a reviewable CI release gate rather than a dashboard someone may or may not inspect.
 
+## Evaluation service and run registry
+
+Install the optional service dependencies and start the API:
+
+```bash
+pip install -e '.[api]'
+uvicorn agent_reliability.api:app --host 0.0.0.0 --port 8000
+```
+
+Submit a recorded evaluation:
+
+```bash
+curl -X POST http://localhost:8000/v1/evaluations \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "suite_name": "support-agent",
+    "candidate_name": "candidate-v3",
+    "cases": [{"case_id": "hello", "prompt": "Say hello"}],
+    "traces": [{"case_id": "hello", "final_answer": "hello"}],
+    "pass_threshold": 0.8
+  }'
+```
+
+Available endpoints:
+
+```text
+GET  /health
+POST /v1/evaluations
+GET  /v1/runs?suite_name=...&candidate_name=...&limit=50
+GET  /v1/runs/{run_id}
+```
+
+Every stored run has an immutable UUID, UTC timestamp, candidate/suite identity and canonical SHA-256 dataset fingerprint. List responses omit the full report for efficient history queries; the detail endpoint returns complete case diagnostics. SQLite uses WAL mode and a suite/time index while keeping the persistence boundary small enough to audit.
+
+Set `AGENT_RELIABILITY_DB` to choose the database path:
+
+```bash
+AGENT_RELIABILITY_DB=/data/evaluations.db \
+  uvicorn agent_reliability.api:app --host 0.0.0.0 --port 8000
+```
+
 ## Docker
 
 ```bash
@@ -231,6 +274,8 @@ src/agent_reliability/
   scoring.py      deterministic component scoring and suite aggregation
   io.py           validated JSONL loading with line-level diagnostics
   reporting.py    JSON and standalone HTML report generation
+  registry.py     SQLite run history and canonical dataset fingerprints
+  api.py          FastAPI evaluation and run-query service
   cli.py          command-line quality gate
 examples/         synthetic evaluation contracts and passing traces
 tests/            scoring, validation and reporting regression tests
