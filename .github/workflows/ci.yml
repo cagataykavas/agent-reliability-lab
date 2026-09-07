@@ -26,6 +26,13 @@ jobs:
       - run: pytest
       - name: Run example benchmark
         run: agent-reliability examples/cases.jsonl examples/traces.jsonl --fail-under 1.0
+      - name: Verify fault detection and regression gate
+        run: |
+          agent-reliability-inject examples/traces.jsonl artifacts/faulty-traces.jsonl --fault drop_evidence
+          if agent-reliability-compare examples/cases.jsonl examples/traces.jsonl artifacts/faulty-traces.jsonl; then
+            echo "Expected the regression gate to reject fault-injected traces"
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         if: matrix.python-version == '3.12'
         with:

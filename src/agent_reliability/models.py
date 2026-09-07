@@ -88,6 +88,12 @@ class AgentTrace:
             error=values.get("error"),
         )
 
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self) | {
+            "tool_calls": [asdict(item) for item in self.tool_calls],
+            "evidence_ids": sorted(self.evidence_ids),
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class ScoreBreakdown:

@@ -41,6 +41,8 @@ This repository turns those questions into executable evaluation contracts.
 | Missing data | explicit failed result for a missing trace; unknown/duplicate IDs rejected |
 | Reports | machine-readable JSON and standalone responsive HTML |
 | CI gate | configurable minimum suite pass rate and non-zero failure exit |
+| Regression analysis | paired baseline/candidate deltas with case-level regression detection |
+| Fault injection | seven deterministic corruption modes for evaluation-suite validation |
 | Portability | dependency-free core, installable CLI, Docker image, Python 3.11–3.13 CI |
 
 ## Architecture
@@ -180,6 +182,30 @@ agent-reliability cases.jsonl traces.jsonl --threshold 0.85 --fail-under 0.95
 ```
 
 `--threshold` controls the minimum score for an individual case. `--fail-under` controls the required fraction of passing cases across the suite.
+
+## Fault injection and regression testing
+
+An evaluation suite should prove that it detects known failures. Generate deterministic corrupted traces:
+
+```bash
+agent-reliability-inject \
+  examples/traces.jsonl \
+  artifacts/faulty-traces.jsonl \
+  --fault drop_evidence
+```
+
+Available faults cover dropped evidence, corrupted arguments, unexpected tools, latency/cost overruns, flipped escalation and unhandled errors. `--every 3` injects the selected fault into every third trace, making mixed pass/fail suites reproducible.
+
+Compare candidate traces against an approved baseline:
+
+```bash
+agent-reliability-compare \
+  examples/cases.jsonl \
+  examples/traces.jsonl \
+  artifacts/faulty-traces.jsonl
+```
+
+The comparison fails with a non-zero exit when the candidate omits baseline cases, exceeds allowed mean/pass-rate drops or regresses more individual cases than policy permits. This makes agent behavior a reviewable CI release gate rather than a dashboard someone may or may not inspect.
 
 ## Docker
 
