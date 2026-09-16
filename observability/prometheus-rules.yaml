@@ -1,0 +1,52 @@
+groups:
+  - name: llm-agent-slo
+    interval: 30s
+    rules:
+      - record: llm:request_error_ratio5m
+        expr: |
+          sum(rate(llm_requests_total{status="error"}[5m]))
+          /
+          clamp_min(sum(rate(llm_requests_total[5m])), 1)
+
+      - record: llm:request_latency_p95_seconds5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(llm_request_duration_seconds_bucket[5m]))
+          )
+
+      - record: llm:cost_per_request_usd5m
+        expr: |
+          sum(rate(llm_request_cost_usd_total[5m]))
+          /
+          clamp_min(sum(rate(llm_requests_total[5m])), 1)
+
+      - alert: LLMAgentHighErrorRatio
+        expr: llm:request_error_ratio5m > 0.01
+        for: 10m
+        labels:
+          severity: warning
+          slo: availability
+        annotations:
+          summary: "LLM agent error ratio is above the 99% availability target"
+          description: "5-minute error ratio has remained above 1% for 10 minutes."
+
+      - alert: LLMAgentLatencySLOBreach
+        expr: llm:request_latency_p95_seconds5m > 2
+        for: 10m
+        labels:
+          severity: warning
+          slo: latency
+        annotations:
+          summary: "LLM agent p95 latency is above 2 seconds"
+          description: "Check model latency, retrieval latency, tool calls and downstream saturation."
+
+      - alert: LLMAgentCostRegression
+        expr: llm:cost_per_request_usd5m > 0.03
+        for: 15m
+        labels:
+          severity: info
+          slo: cost
+        annotations:
+          summary: "Mean LLM cost per request is above the reference budget"
+          description: "Inspect token growth, model routing, retries and prompt-version changes."
