@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: LLM Observability
+    folder: Agent Reliability
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards
