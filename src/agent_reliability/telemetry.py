@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field
 from hashlib import sha256
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 REDACTED = "[REDACTED]"
 DEFAULT_SENSITIVE_KEYS = frozenset(
