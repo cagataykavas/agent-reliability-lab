@@ -1,0 +1,60 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+  attributes/redact:
+    actions:
+      - key: user.email
+        action: delete
+      - key: authorization
+        action: delete
+      - key: api.key
+        action: delete
+  probabilistic_sampler:
+    sampling_percentage: 20
+  batch:
+    send_batch_size: 1024
+    timeout: 2s
+
+connectors:
+  spanmetrics:
+    histogram:
+      explicit:
+        buckets: [0.1s, 0.25s, 0.5s, 1s, 2s, 5s, 10s]
+    dimensions:
+      - name: gen_ai.system
+      - name: gen_ai.request.model
+
+exporters:
+  otlphttp/traces:
+    endpoint: ${env:TRACE_BACKEND_OTLP_HTTP_ENDPOINT}
+    sending_queue:
+      enabled: true
+      num_consumers: 4
+      queue_size: 4096
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+      max_elapsed_time: 300s
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/redact, probabilistic_sampler, batch]
+      exporters: [spanmetrics, otlphttp/traces]
+    metrics/spanmetrics:
+      receivers: [spanmetrics]
+      processors: [batch]
+      exporters: [prometheus]
