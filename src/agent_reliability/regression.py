@@ -25,7 +25,7 @@ class RegressionResult:
     baseline_mean_score: float
     candidate_mean_score: float
     mean_score_delta: float
-    mean_score_delta_interval: BootstrapInterval
+    mean_score_delta_interval: BootstrapInterval | None
     baseline_pass_rate: float
     candidate_pass_rate: float
     pass_rate_delta: float
@@ -42,7 +42,11 @@ class RegressionResult:
                 "baseline_mean_score": self.baseline_mean_score,
                 "candidate_mean_score": self.candidate_mean_score,
                 "mean_score_delta": self.mean_score_delta,
-                "mean_score_delta_interval": self.mean_score_delta_interval.to_dict(),
+                "mean_score_delta_interval": (
+                    self.mean_score_delta_interval.to_dict()
+                    if self.mean_score_delta_interval is not None
+                    else None
+                ),
                 "baseline_pass_rate": self.baseline_pass_rate,
                 "candidate_pass_rate": self.candidate_pass_rate,
                 "pass_rate_delta": self.pass_rate_delta,
@@ -88,12 +92,16 @@ def compare_reports(
     )
     mean_delta = candidate.mean_score - baseline.mean_score
     paired_ids = sorted(shared_ids)
-    mean_delta_interval = paired_bootstrap_mean_delta(
-        [baseline_map[case_id].score for case_id in paired_ids],
-        [candidate_map[case_id].score for case_id in paired_ids],
-        samples=active_policy.bootstrap_samples,
-        confidence_level=active_policy.confidence_level,
-        seed=active_policy.bootstrap_seed,
+    mean_delta_interval = (
+        paired_bootstrap_mean_delta(
+            [baseline_map[case_id].score for case_id in paired_ids],
+            [candidate_map[case_id].score for case_id in paired_ids],
+            samples=active_policy.bootstrap_samples,
+            confidence_level=active_policy.confidence_level,
+            seed=active_policy.bootstrap_seed,
+        )
+        if paired_ids
+        else None
     )
     pass_delta = candidate.pass_rate - baseline.pass_rate
     reasons: list[str] = []
@@ -106,6 +114,7 @@ def compare_reports(
         )
     if (
         active_policy.max_confident_mean_score_drop is not None
+        and mean_delta_interval is not None
         and mean_delta_interval.upper < -active_policy.max_confident_mean_score_drop
     ):
         reasons.append(
