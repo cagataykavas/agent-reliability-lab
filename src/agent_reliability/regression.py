@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .models import EvaluationReport
+from .statistics import BootstrapInterval, paired_bootstrap_mean_delta
 
 
 @dataclass(frozen=True, slots=True)
@@ -12,6 +13,10 @@ class RegressionPolicy:
     max_pass_rate_drop: float = 0.0
     max_case_regressions: int = 0
     case_score_tolerance: float = 1e-9
+    bootstrap_samples: int = 2_000
+    confidence_level: float = 0.95
+    bootstrap_seed: int = 17
+    max_confident_mean_score_drop: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +25,7 @@ class RegressionResult:
     baseline_mean_score: float
     candidate_mean_score: float
     mean_score_delta: float
+    mean_score_delta_interval: BootstrapInterval | None
     baseline_pass_rate: float
     candidate_pass_rate: float
     pass_rate_delta: float
@@ -36,6 +42,11 @@ class RegressionResult:
                 "baseline_mean_score": self.baseline_mean_score,
                 "candidate_mean_score": self.candidate_mean_score,
                 "mean_score_delta": self.mean_score_delta,
+                "mean_score_delta_interval": (
+                    self.mean_score_delta_interval.to_dict()
+                    if self.mean_score_delta_interval is not None
+                    else None
+                ),
                 "baseline_pass_rate": self.baseline_pass_rate,
                 "candidate_pass_rate": self.candidate_pass_rate,
                 "pass_rate_delta": self.pass_rate_delta,
@@ -80,6 +91,18 @@ def compare_reports(
         )
     )
     mean_delta = candidate.mean_score - baseline.mean_score
+    paired_ids = sorted(shared_ids)
+    mean_delta_interval = (
+        paired_bootstrap_mean_delta(
+            [baseline_map[case_id].score for case_id in paired_ids],
+            [candidate_map[case_id].score for case_id in paired_ids],
+            samples=active_policy.bootstrap_samples,
+            confidence_level=active_policy.confidence_level,
+            seed=active_policy.bootstrap_seed,
+        )
+        if paired_ids
+        else None
+    )
     pass_delta = candidate.pass_rate - baseline.pass_rate
     reasons: list[str] = []
     if missing:
@@ -88,6 +111,16 @@ def compare_reports(
         reasons.append(
             f"mean score dropped {abs(mean_delta):.4f}; "
             f"allowed drop is {active_policy.max_mean_score_drop:.4f}"
+        )
+    if (
+        active_policy.max_confident_mean_score_drop is not None
+        and mean_delta_interval is not None
+        and mean_delta_interval.upper < -active_policy.max_confident_mean_score_drop
+    ):
+        reasons.append(
+            "paired confidence interval indicates a material score regression: "
+            f"upper bound {mean_delta_interval.upper:.4f} is below "
+            f"-{active_policy.max_confident_mean_score_drop:.4f}"
         )
     if pass_delta < -active_policy.max_pass_rate_drop:
         reasons.append(
@@ -105,6 +138,7 @@ def compare_reports(
         baseline_mean_score=round(baseline.mean_score, 6),
         candidate_mean_score=round(candidate.mean_score, 6),
         mean_score_delta=round(mean_delta, 6),
+        mean_score_delta_interval=mean_delta_interval,
         baseline_pass_rate=round(baseline.pass_rate, 6),
         candidate_pass_rate=round(candidate.pass_rate, 6),
         pass_rate_delta=round(pass_delta, 6),

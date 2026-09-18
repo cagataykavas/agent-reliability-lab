@@ -41,7 +41,7 @@ This repository turns those questions into executable evaluation contracts.
 | Missing data | explicit failed result for a missing trace; unknown/duplicate IDs rejected |
 | Reports | machine-readable JSON and standalone responsive HTML |
 | CI gate | configurable minimum suite pass rate and non-zero failure exit |
-| Regression analysis | paired baseline/candidate deltas with case-level regression detection |
+| Regression analysis | paired deltas, deterministic bootstrap intervals and confidence-aware gates |
 | Fault injection | seven deterministic corruption modes for evaluation-suite validation |
 | Portability | dependency-free core, installable CLI, Docker image, Python 3.11–3.13 CI |
 | Run registry | immutable UUID runs, dataset fingerprints and SQLite persistence |
@@ -207,7 +207,22 @@ agent-reliability-compare \
   artifacts/faulty-traces.jsonl
 ```
 
-The comparison fails with a non-zero exit when the candidate omits baseline cases, exceeds allowed mean/pass-rate drops or regresses more individual cases than policy permits. This makes agent behavior a reviewable CI release gate rather than a dashboard someone may or may not inspect.
+The comparison fails with a non-zero exit when the candidate omits baseline cases, exceeds allowed mean/pass-rate drops or regresses more individual cases than policy permits. It also reports a deterministic percentile-bootstrap confidence interval over **paired case-level score deltas**, preserving the baseline/candidate relationship for each task.
+
+For suites large enough to support uncertainty estimates, an optional confidence-aware gate rejects only when the entire interval exceeds the allowed regression:
+
+```bash
+agent-reliability-compare \
+  examples/cases.jsonl \
+  examples/traces.jsonl \
+  artifacts/candidate-traces.jsonl \
+  --bootstrap-samples 5000 \
+  --confidence-level 0.95 \
+  --bootstrap-seed 17 \
+  --max-confident-score-drop 0.02
+```
+
+The fixed seed makes CI output reproducible. The interval quantifies sampling uncertainty in the evaluated cases; it does not correct a biased or unrepresentative benchmark. This makes agent behavior a reviewable release gate rather than a dashboard someone may or may not inspect.
 
 ## Evaluation service and run registry
 
@@ -297,7 +312,6 @@ These limits are explicit because reliable evaluation requires knowing exactly w
 - provider/framework trace adapters;
 - trajectory perturbation and fault injection;
 - pairwise candidate comparison;
-- statistical confidence intervals and regression significance;
 - OpenTelemetry-compatible span ingestion;
 - FastAPI evaluation service and run registry;
 - benchmark history dashboard;

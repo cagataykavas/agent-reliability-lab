@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from agent_reliability.faults import FaultType, inject_fault, inject_suite
@@ -67,6 +69,8 @@ def test_regression_gate_rejects_worse_candidate() -> None:
     assert not comparison.passed
     assert comparison.regressed_cases == ("case",)
     assert comparison.mean_score_delta < 0
+    assert comparison.mean_score_delta_interval is not None
+    assert comparison.mean_score_delta_interval.paired_cases == 1
     assert comparison.reasons
 
 
@@ -93,3 +97,30 @@ def test_missing_baseline_case_always_fails_gate() -> None:
     comparison = compare_reports(baseline, candidate)
     assert not comparison.passed
     assert comparison.missing_cases == ("case",)
+
+
+def test_confidence_gate_rejects_consistent_paired_regression() -> None:
+    cases = [replace(_case(), case_id=f"case-{index}") for index in range(8)]
+    baseline_traces = [replace(_trace(), case_id=case.case_id) for case in cases]
+    candidate_traces = [
+        inject_fault(trace, FaultType.DROP_EVIDENCE) for trace in baseline_traces
+    ]
+    baseline = evaluate_suite(cases, baseline_traces)
+    candidate = evaluate_suite(cases, candidate_traces)
+
+    comparison = compare_reports(
+        baseline,
+        candidate,
+        policy=RegressionPolicy(
+            max_mean_score_drop=1.0,
+            max_pass_rate_drop=1.0,
+            max_case_regressions=8,
+            bootstrap_samples=500,
+            max_confident_mean_score_drop=0.1,
+        ),
+    )
+
+    assert not comparison.passed
+    assert comparison.mean_score_delta_interval is not None
+    assert comparison.mean_score_delta_interval.upper < -0.1
+    assert any("confidence interval" in reason for reason in comparison.reasons)
