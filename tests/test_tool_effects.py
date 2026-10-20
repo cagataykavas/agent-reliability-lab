@@ -102,6 +102,62 @@ def test_hash_chain_detects_event_tampering() -> None:
         ToolEffectLedger.from_jsonl("\n".join(lines))
 
 
+def test_trusted_head_accepts_exact_checkpoint() -> None:
+    ledger = prepared()
+    ledger.dispatch("effect-1")
+    content, trusted_head = ledger.export_checkpoint()
+
+    recovered = ToolEffectLedger.from_jsonl(
+        content,
+        expected_head_hash=trusted_head,
+    )
+
+    assert recovered.head_hash == trusted_head
+    assert recovered.snapshot()["head_hash"] == trusted_head
+
+
+def test_trusted_head_rejects_valid_but_truncated_journal() -> None:
+    ledger = prepared()
+    ledger.dispatch("effect-1")
+    ledger.commit("effect-1", {"receipt": "R-1"})
+    content, trusted_head = ledger.export_checkpoint()
+    truncated = "\n".join(content.splitlines()[:-1]) + "\n"
+
+    with pytest.raises(JournalCorruption, match="trusted checkpoint"):
+        ToolEffectLedger.from_jsonl(
+            truncated,
+            expected_head_hash=trusted_head,
+        )
+
+
+def test_trusted_head_rejects_fully_rewritten_valid_journal() -> None:
+    original = prepared()
+    original.dispatch("effect-1")
+    _, trusted_head = original.export_checkpoint()
+
+    rewritten = ToolEffectLedger()
+    rewritten.prepare("effect-1", "send_payment", {"amount": 999, "currency": "TRY"})
+    rewritten.dispatch("effect-1")
+
+    with pytest.raises(JournalCorruption, match="trusted checkpoint"):
+        ToolEffectLedger.from_jsonl(
+            rewritten.dump_jsonl(),
+            expected_head_hash=trusted_head,
+        )
+
+
+@pytest.mark.parametrize(
+    "expected_head_hash",
+    ["short", "A" * 64, 7, True],
+)
+def test_invalid_trusted_head_fails_closed(expected_head_hash: object) -> None:
+    with pytest.raises(ValueError, match="expected_head_hash"):
+        ToolEffectLedger.from_jsonl(
+            "",
+            expected_head_hash=expected_head_hash,
+        )
+
+
 def test_journal_rejects_unknown_and_duplicate_fields() -> None:
     line = prepared().dump_jsonl().strip()
 

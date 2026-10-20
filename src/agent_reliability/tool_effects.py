@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 import json
 import threading
 from collections.abc import Mapping
@@ -187,6 +188,13 @@ class ToolEffectLedger:
         with self._lock:
             return tuple(self._events)
 
+    @property
+    def head_hash(self) -> str:
+        """Return the current journal head for external checkpoint storage."""
+
+        with self._lock:
+            return self._events[-1].event_hash if self._events else GENESIS_HASH
+
     def get(self, effect_id: str) -> EffectRecord | None:
         effect_ref = _reference(effect_id, "effect_id")
         with self._lock:
@@ -257,15 +265,22 @@ class ToolEffectLedger:
                 "effects": len(self._records),
                 "events": len(self._events),
                 "states": counts,
-                "head_hash": self._events[-1].event_hash if self._events else GENESIS_HASH,
+                "head_hash": self.head_hash,
             }
 
     def dump_jsonl(self) -> str:
+        return self.export_checkpoint()[0]
+
+    def export_checkpoint(self) -> tuple[str, str]:
+        """Atomically export journal text and its separately storable head hash."""
+
         with self._lock:
-            return "".join(
+            content = "".join(
                 json.dumps(event.as_dict(), sort_keys=True, separators=(",", ":")) + "\n"
                 for event in self._events
             )
+            head_hash = self._events[-1].event_hash if self._events else GENESIS_HASH
+            return content, head_hash
 
     @classmethod
     def from_jsonl(
@@ -274,9 +289,12 @@ class ToolEffectLedger:
         *,
         max_effects: int = 10_000,
         max_events: int = 100_000,
+        expected_head_hash: str | None = None,
     ) -> ToolEffectLedger:
         if not isinstance(content, str):
             raise JournalCorruption("journal must be text")
+        if expected_head_hash is not None and not _is_sha256(expected_head_hash):
+            raise ValueError("expected_head_hash must be a lowercase SHA-256 value")
         if len(content.encode()) > MAX_JOURNAL_BYTES:
             raise JournalCorruption("journal exceeds byte bound")
         ledger = cls(max_effects=max_effects, max_events=max_events)
@@ -294,6 +312,10 @@ class ToolEffectLedger:
                 raise JournalCorruption(f"invalid JSON on line {line_number}") from exc
             event = ledger._parse_event(data, line_number)
             ledger._verify_and_apply(event)
+        if expected_head_hash is not None and not hmac.compare_digest(
+            ledger.head_hash, expected_head_hash
+        ):
+            raise JournalCorruption("journal head does not match trusted checkpoint")
         return ledger
 
     def _complete(
@@ -502,7 +524,8 @@ def _demo() -> dict[str, Any]:
     ledger = ToolEffectLedger()
     ledger.prepare("refund:order-77", "issue_refund", {"order_id": "O-77", "amount": 25})
     ledger.dispatch("refund:order-77")
-    recovered = ToolEffectLedger.from_jsonl(ledger.dump_jsonl())
+    journal, trusted_head = ledger.export_checkpoint()
+    recovered = ToolEffectLedger.from_jsonl(journal, expected_head_hash=trusted_head)
     blocked_retry = False
     try:
         recovered.dispatch("refund:order-77")

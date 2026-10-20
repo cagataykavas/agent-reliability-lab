@@ -25,9 +25,13 @@ results; it does not serialize raw tool arguments or credentials.
 ```python
 ledger.prepare("refund:order-77", "issue_refund", {"order_id": "O-77"})
 ledger.dispatch("refund:order-77")
+journal, trusted_head = ledger.export_checkpoint()
 
 # Persist before the external call. If the process now crashes, recovery blocks a blind retry.
-recovered = ToolEffectLedger.from_jsonl(ledger.dump_jsonl())
+recovered = ToolEffectLedger.from_jsonl(
+    journal,
+    expected_head_hash=trusted_head,
+)
 recovered.reconcile_not_applied("refund:order-77")
 recovered.dispatch("refund:order-77")
 recovered.commit("refund:order-77", {"receipt_id": "R-19"})
@@ -43,11 +47,14 @@ python -m agent_reliability.tool_effects --output artifacts/tool-effects.json
 
 The implementation is an in-memory state machine with a portable JSONL journal. It does not make
 file writes atomic, call an external tool, acquire a cross-process lock, or guarantee exactly-once
-delivery by itself. The hash chain detects changes only when its head is stored in a separate trusted
-location; it is integrity evidence, not authentication against an attacker who can rewrite the whole
-journal. Production integration must durably append `dispatched` before the side effect, durably
-append the terminal event afterward, use one writer or transactional compare-and-set, and reconcile
-unknown outcomes through the provider's idempotency or status API.
+delivery by itself. `export_checkpoint()` captures the journal and head under the same lock. Store
+that head in an authenticated, rollback-protected location and pass it back as
+`expected_head_hash`; recovery then rejects both truncation and a fully rewritten, internally valid
+journal. Without that external checkpoint, the chain remains integrity evidence rather than
+authentication. Production integration must durably append `dispatched` before the side effect,
+durably append the terminal event afterward, atomically advance the trusted checkpoint, use one
+writer or transactional compare-and-set, and reconcile unknown outcomes through the provider's
+idempotency or status API.
 
 The next step is a SQLite or PostgreSQL adapter that atomically claims prepared work, fences stale
 workers with a lease generation, and persists each hash-chained transition before acknowledging it.
