@@ -10,7 +10,7 @@ Agent Reliability Lab evaluates **recorded agent behavior against explicit contr
 
 The core evaluator is model- and framework-independent. It does not need an API key, an LLM provider or network access, so the same recorded trace produces the same result locally and in CI.
 
-All included tasks, traces and policies are synthetic. No employer data, prompts, customer records or proprietary agent behavior are included.
+Bundled example tasks, traces and policies are synthetic. The optional RAG import adapter can also read existing public development-run artifacts. No employer data, prompts, customer records or proprietary agent behavior are included.
 
 ## Why this project exists
 
@@ -155,6 +155,8 @@ The default score is a transparent weighted combination:
 | Escalation correctness | 10% |
 
 Every component is available separately in the JSON report. The score is not presented as a universal measure of agent quality; it is an explicit release policy that teams can inspect and extend.
+
+The weighted `score` remains a quality diagnostic, not an authorization or safety decision. Missing required escalation, missing required evidence, explicit allowlist violations and unhandled errors always fail a case, regardless of score. Latency/cost preferences, unexpected-but-allowed extra calls and answer keyword mismatches remain soft by default. Cases can explicitly promote additional diagnostics with `hard_failure_types` (for example `["budget_exceeded"]`). Reports retain existing fields and add `hard_failures`; consumers must use `passed`, not a score comparison, for admission. See [mandatory gates](docs/mandatory-gates.md).
 
 An unhandled trace error applies an additional penalty and always fails the case. A missing trace is converted into an explicit `unhandled_error` result rather than silently disappearing from aggregate metrics.
 
@@ -306,3 +308,9 @@ These limits are explicit because reliable evaluation requires knowing exactly w
 ## License
 
 [MIT](LICENSE)
+
+## Import existing public RAG runs
+
+`python -m agent_reliability.rag_import /path/to/rag-agent/evidence/agent-v2-dev --output artifacts/rag-v2.json`
+
+This offline adapter preserves original correctness labels, protocol and file hashes, maps actual calls to `AgentTrace`, and checks read-only tool/citation contracts. It does not run a model or declare inaccurate answers unsafe. See [adapter boundaries](docs/mandatory-gates.md#rag-adapter).

@@ -113,10 +113,20 @@ def evaluate_trace(
     if trace.error:
         score *= 0.5
     score = round(score, 6)
+    # Quality is compensable; mandatory contract violations are not.
+    mandatory = {
+        FailureType.MISSING_ESCALATION,
+        FailureType.MISSING_EVIDENCE,
+        FailureType.UNHANDLED_ERROR,
+    } | set(case.hard_failure_types)
+    if disallowed:
+        mandatory.add(FailureType.UNEXPECTED_TOOL)
+    hard_failures = tuple(dict.fromkeys(item for item in failures if item in mandatory))
     return CaseResult(
         case_id=case.case_id,
         score=score,
-        passed=score >= pass_threshold and not trace.error,
+        passed=score >= pass_threshold and not hard_failures,
+        hard_failures=hard_failures,
         breakdown=breakdown,
         failures=tuple(dict.fromkeys(failures)),
         diagnostics=tuple(diagnostics),

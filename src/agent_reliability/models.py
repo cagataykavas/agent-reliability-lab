@@ -46,6 +46,8 @@ class EvaluationCase:
     max_cost_usd: float | None = None
     should_escalate: bool = False
     reference_answer_contains: tuple[str, ...] = ()
+    # Additional zero-tolerance diagnostics; built-in mandatory gates cannot be disabled.
+    hard_failure_types: frozenset[FailureType] = frozenset()
 
     @classmethod
     def from_dict(cls, values: dict[str, Any]) -> EvaluationCase:
@@ -61,6 +63,7 @@ class EvaluationCase:
             max_cost_usd=_optional_float(values.get("max_cost_usd")),
             should_escalate=bool(values.get("should_escalate", False)),
             reference_answer_contains=tuple(map(str, values.get("reference_answer_contains", []))),
+            hard_failure_types=frozenset(FailureType(item) for item in values.get("hard_failure_types", [])),
         )
 
 
@@ -114,10 +117,12 @@ class CaseResult:
     breakdown: ScoreBreakdown
     failures: tuple[FailureType, ...]
     diagnostics: tuple[str, ...]
+    hard_failures: tuple[FailureType, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         values = asdict(self)
         values["failures"] = [str(item) for item in self.failures]
+        values["hard_failures"] = [str(item) for item in self.hard_failures]
         return values
 
 
