@@ -46,6 +46,7 @@ This repository turns those questions into executable evaluation contracts.
 | Portability | dependency-free core, installable CLI, Docker image, Python 3.11–3.13 CI |
 | Run registry | immutable UUID runs, dataset fingerprints and SQLite persistence |
 | Evaluation API | FastAPI create/list/detail endpoints with validated request contracts |
+| Input integrity | streaming JSONL ingestion with byte, record and nesting budgets |
 
 ## Architecture
 
@@ -184,6 +185,29 @@ agent-reliability cases.jsonl traces.jsonl --threshold 0.85 --fail-under 0.95
 ```
 
 `--threshold` controls the minimum score for an individual case. `--fail-under` controls the required fraction of passing cases across the suite.
+
+### Bounded benchmark ingestion
+
+The CLI streams case and trace JSONL instead of reading whole files into memory. Each input is
+limited independently to 64 MiB, 10,000 records, 1 MiB per physical line and 32 levels of JSON
+nesting by default. Duplicate object keys, non-finite numbers, invalid UTF-8, non-regular files and
+symbolic links are rejected before evaluation, so an ambiguous or unexpectedly large benchmark
+cannot silently become release evidence.
+
+Budgets can be tightened for a known suite:
+
+```bash
+agent-reliability cases.jsonl traces.jsonl \
+  --max-input-bytes 8388608 \
+  --max-line-bytes 262144 \
+  --max-records 2000 \
+  --max-json-depth 16
+```
+
+These controls bound file ingestion, not the FastAPI request body; production API deployments must
+also enforce authenticated callers and request-size limits at the ASGI gateway. Symlink refusal
+reduces accidental workspace substitution but does not make an untrusted, concurrently mutable
+local filesystem a safe evidence source.
 
 ## Fault injection and regression testing
 
