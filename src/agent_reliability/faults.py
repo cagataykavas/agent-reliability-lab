@@ -10,6 +10,7 @@ class FaultType(StrEnum):
     DROP_EVIDENCE = "drop_evidence"
     CORRUPT_ARGUMENT = "corrupt_argument"
     INSERT_UNEXPECTED_TOOL = "insert_unexpected_tool"
+    FAIL_TOOL_CALL = "fail_tool_call"
     EXCEED_LATENCY = "exceed_latency"
     EXCEED_COST = "exceed_cost"
     FLIP_ESCALATION = "flip_escalation"
@@ -41,6 +42,11 @@ def inject_fault(
     if fault is FaultType.INSERT_UNEXPECTED_TOOL:
         injected = ToolCall(name="fault_injection.unknown_tool", arguments={})
         return replace(trace, tool_calls=(*trace.tool_calls, injected))
+    if fault is FaultType.FAIL_TOOL_CALL:
+        if not trace.tool_calls:
+            raise ValueError("cannot fail a tool call on a trace without tool calls")
+        first, *rest = trace.tool_calls
+        return replace(trace, tool_calls=(replace(first, succeeded=False), *rest))
     if fault is FaultType.EXCEED_LATENCY:
         return replace(trace, total_latency_ms=max(trace.total_latency_ms, 1.0) * magnitude)
     if fault is FaultType.EXCEED_COST:

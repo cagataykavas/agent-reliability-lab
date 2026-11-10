@@ -35,6 +35,7 @@ def _trace() -> AgentTrace:
         (FaultType.DROP_EVIDENCE, "evidence_ids"),
         (FaultType.CORRUPT_ARGUMENT, "tool_calls"),
         (FaultType.INSERT_UNEXPECTED_TOOL, "tool_calls"),
+        (FaultType.FAIL_TOOL_CALL, "tool_calls"),
         (FaultType.EXCEED_LATENCY, "total_latency_ms"),
         (FaultType.EXCEED_COST, "total_cost_usd"),
         (FaultType.FLIP_ESCALATION, "escalated"),
@@ -56,6 +57,15 @@ def test_suite_injection_is_deterministic_and_selective() -> None:
     assert first == second
     assert first[0].error
     assert first[1] == traces[1]
+
+
+def test_failed_tool_fault_is_detected_by_evaluator() -> None:
+    faulty = inject_fault(_trace(), FaultType.FAIL_TOOL_CALL)
+
+    result = evaluate_suite([_case()], [faulty]).results[0]
+
+    assert not result.passed
+    assert "tool_execution_failed" in {str(item) for item in result.failures}
 
 
 def test_regression_gate_rejects_worse_candidate() -> None:

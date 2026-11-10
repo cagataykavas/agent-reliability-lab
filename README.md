@@ -17,6 +17,7 @@ All included tasks, traces and policies are synthetic. No employer data, prompts
 An agent demo can succeed once while remaining unsafe to ship. Production questions are different:
 
 - Did it call the correct tool, or merely produce a plausible final sentence?
+- Did required tool calls actually succeed, and were retries inside a reviewed failure budget?
 - Were arguments correct and calls made in a valid order?
 - Can every important claim be tied to approved evidence?
 - Did it exceed latency or token-cost budgets?
@@ -33,6 +34,7 @@ This repository turns those questions into executable evaluation contracts.
 | Tool selection | duplicate-aware precision/recall/F1 over expected and observed calls |
 | Argument evaluation | required key/value correctness for matched tool invocations |
 | Trajectory order | ordered-subsequence validation for multi-tool workflows |
+| Tool outcomes | successful-call scoring with a per-case failed-call budget |
 | Evidence grounding | required evidence-ID coverage independent from answer fluency |
 | Answer contract | case-insensitive required-fact coverage for deterministic smoke checks |
 | Operational budgets | per-case latency and cost ceilings |
@@ -118,6 +120,7 @@ Each JSONL case defines observable expectations:
   "required_evidence": ["order:O-77", "policy:refund:TR"],
   "max_latency_ms": 1400,
   "max_cost_usd": 0.02,
+  "max_failed_tool_calls": 1,
   "should_escalate": true,
   "reference_answer_contains": ["manual review"]
 }
@@ -156,6 +159,8 @@ The default score is a transparent weighted combination:
 
 Every component is available separately in the JSON report. The score is not presented as a universal measure of agent quality; it is an explicit release policy that teams can inspect and extend.
 
+Only successful tool calls satisfy selection, argument, and ordering contracts. Failed attempts remain visible and count against `max_failed_tool_calls`, which defaults to zero. A failed call followed by a successful retry can pass only when the case explicitly budgets that failure; failed disallowed tools remain hard policy violations. Exceeding the failure budget is a hard case failure even when the weighted score remains above the normal threshold.
+
 An unhandled trace error applies an additional penalty and always fails the case. A missing trace is converted into an explicit `unhandled_error` result rather than silently disappearing from aggregate metrics.
 
 ## Failure taxonomy
@@ -165,6 +170,8 @@ missing_tool             expected capability was never called
 unexpected_tool          extra or policy-disallowed tool was called
 wrong_arguments          matched tool received incorrect required arguments
 wrong_tool_order         expected multi-step order was not preserved
+tool_execution_failed    an expected tool was attempted but never succeeded
+tool_failure_budget_exceeded  failed calls exceeded the case retry budget
 missing_evidence         required evidence IDs were not cited
 budget_exceeded          latency or cost ceiling was crossed
 unhandled_error          execution ended with an unresolved error
@@ -196,7 +203,7 @@ agent-reliability-inject \
   --fault drop_evidence
 ```
 
-Available faults cover dropped evidence, corrupted arguments, unexpected tools, latency/cost overruns, flipped escalation and unhandled errors. `--every 3` injects the selected fault into every third trace, making mixed pass/fail suites reproducible.
+Available faults cover dropped evidence, corrupted arguments, unexpected tools, failed tool calls, latency/cost overruns, flipped escalation and unhandled errors. `--every 3` injects the selected fault into every third trace, making mixed pass/fail suites reproducible.
 
 Compare candidate traces against an approved baseline:
 

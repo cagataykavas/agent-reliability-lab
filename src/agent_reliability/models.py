@@ -10,6 +10,8 @@ class FailureType(StrEnum):
     UNEXPECTED_TOOL = "unexpected_tool"
     WRONG_ARGUMENTS = "wrong_arguments"
     WRONG_TOOL_ORDER = "wrong_tool_order"
+    TOOL_EXECUTION_FAILED = "tool_execution_failed"
+    TOOL_FAILURE_BUDGET_EXCEEDED = "tool_failure_budget_exceeded"
     MISSING_EVIDENCE = "missing_evidence"
     BUDGET_EXCEEDED = "budget_exceeded"
     UNHANDLED_ERROR = "unhandled_error"
@@ -44,6 +46,7 @@ class EvaluationCase:
     allowed_tools: frozenset[str] = frozenset()
     max_latency_ms: float | None = None
     max_cost_usd: float | None = None
+    max_failed_tool_calls: int = 0
     should_escalate: bool = False
     reference_answer_contains: tuple[str, ...] = ()
 
@@ -59,6 +62,7 @@ class EvaluationCase:
             allowed_tools=frozenset(map(str, allowed)),
             max_latency_ms=_optional_float(values.get("max_latency_ms")),
             max_cost_usd=_optional_float(values.get("max_cost_usd")),
+            max_failed_tool_calls=int(values.get("max_failed_tool_calls", 0)),
             should_escalate=bool(values.get("should_escalate", False)),
             reference_answer_contains=tuple(map(str, values.get("reference_answer_contains", []))),
         )
@@ -140,7 +144,9 @@ class EvaluationReport:
 
     @property
     def mean_score(self) -> float:
-        return sum(item.score for item in self.results) / self.total_cases if self.total_cases else 0.0
+        return (
+            sum(item.score for item in self.results) / self.total_cases if self.total_cases else 0.0
+        )
 
     def to_dict(self) -> dict[str, Any]:
         failure_counts: dict[str, int] = {}
