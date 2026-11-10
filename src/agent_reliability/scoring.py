@@ -35,25 +35,45 @@ def evaluate_trace(
         raise ValueError(f"case/trace ID mismatch: {case.case_id!r} != {trace.case_id!r}")
     if not 0.0 <= pass_threshold <= 1.0:
         raise ValueError("pass_threshold must be between 0 and 1")
+    if case.max_failed_tool_calls < 0:
+        raise ValueError("max_failed_tool_calls must be non-negative")
+    if any(not item.succeeded for item in case.expected_tools):
+        raise ValueError(
+            "expected_tools must describe successful calls; use max_failed_tool_calls for retries"
+        )
 
     failures: list[FailureType] = []
     diagnostics: list[str] = []
     expected_names = [item.name for item in case.expected_tools]
-    actual_names = [item.name for item in trace.tool_calls]
+    successful_calls = tuple(item for item in trace.tool_calls if item.succeeded)
+    failed_calls = tuple(item for item in trace.tool_calls if not item.succeeded)
+    actual_names = [item.name for item in successful_calls]
+    all_actual_names = [item.name for item in trace.tool_calls]
 
     tool_selection = _multiset_f1(expected_names, actual_names)
     missing = Counter(expected_names) - Counter(actual_names)
     unexpected = Counter(actual_names) - Counter(expected_names)
     if missing:
         failures.append(FailureType.MISSING_TOOL)
-        diagnostics.append(f"Missing expected tools: {_format_counter(missing)}")
-    disallowed = [name for name in actual_names if case.allowed_tools and name not in case.allowed_tools]
+        diagnostics.append(f"Missing successful expected tools: {_format_counter(missing)}")
+    failed_without_success = sorted(
+        name for name in missing if any(item.name == name for item in failed_calls)
+    )
+    if failed_without_success:
+        failures.append(FailureType.TOOL_EXECUTION_FAILED)
+        diagnostics.append(
+            "Expected tools were attempted but never succeeded: "
+            + ", ".join(failed_without_success)
+        )
+    disallowed = [
+        name for name in all_actual_names if case.allowed_tools and name not in case.allowed_tools
+    ]
     if unexpected or disallowed:
         failures.append(FailureType.UNEXPECTED_TOOL)
         names = sorted(set(unexpected) | set(disallowed))
         diagnostics.append(f"Unexpected or disallowed tools: {', '.join(names)}")
 
-    argument_correctness = _argument_score(case.expected_tools, trace.tool_calls)
+    argument_correctness = _argument_score(case.expected_tools, successful_calls)
     if argument_correctness < 1.0 and case.expected_tools:
         failures.append(FailureType.WRONG_ARGUMENTS)
         diagnostics.append("One or more matched tool calls used incomplete or incorrect arguments")
@@ -76,6 +96,13 @@ def evaluate_trace(
 
     budget_compliance = 1.0
     budget_messages: list[str] = []
+    if len(failed_calls) > case.max_failed_tool_calls:
+        failures.append(FailureType.TOOL_FAILURE_BUDGET_EXCEEDED)
+        budget_compliance = 0.0
+        diagnostics.append(
+            "Tool failure budget exceeded: "
+            f"failed calls {len(failed_calls)} > {case.max_failed_tool_calls}"
+        )
     if case.max_latency_ms is not None and trace.total_latency_ms > case.max_latency_ms:
         budget_compliance = 0.0
         budget_messages.append(
@@ -116,7 +143,13 @@ def evaluate_trace(
     return CaseResult(
         case_id=case.case_id,
         score=score,
-        passed=score >= pass_threshold and not trace.error,
+        passed=(
+            score >= pass_threshold
+            and not trace.error
+            and len(failed_calls) <= case.max_failed_tool_calls
+            and not failed_without_success
+            and not disallowed
+        ),
         breakdown=breakdown,
         failures=tuple(dict.fromkeys(failures)),
         diagnostics=tuple(diagnostics),
@@ -168,7 +201,9 @@ def _argument_score(expected: tuple[ToolCall, ...], actual: tuple[ToolCall, ...]
     remaining = list(actual)
     scores: list[float] = []
     for wanted in expected:
-        match_index = next((i for i, item in enumerate(remaining) if item.name == wanted.name), None)
+        match_index = next(
+            (i for i, item in enumerate(remaining) if item.name == wanted.name), None
+        )
         if match_index is None:
             scores.append(0.0)
             continue
@@ -216,4 +251,6 @@ def _f1(precision: float, recall: float) -> float:
 
 
 def _format_counter(values: Counter[str]) -> str:
-    return ", ".join(f"{name}×{count}" if count > 1 else name for name, count in sorted(values.items()))
+    return ", ".join(
+        f"{name}×{count}" if count > 1 else name for name, count in sorted(values.items())
+    )
