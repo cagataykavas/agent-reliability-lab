@@ -18,6 +18,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-score-drop", type=float, default=0.01)
     parser.add_argument("--max-pass-rate-drop", type=float, default=0.0)
     parser.add_argument("--max-case-regressions", type=int, default=0)
+    parser.add_argument(
+        "--directional-alpha",
+        type=float,
+        help="also fail on a one-sided paired sign test at this significance level",
+    )
+    parser.add_argument("--confidence-level", type=float, default=0.95)
+    parser.add_argument("--min-directional-changes", type=int, default=5)
     args = parser.parse_args(argv)
 
     cases = load_cases(args.cases)
@@ -30,6 +37,9 @@ def main(argv: list[str] | None = None) -> int:
             max_mean_score_drop=args.max_score_drop,
             max_pass_rate_drop=args.max_pass_rate_drop,
             max_case_regressions=args.max_case_regressions,
+            directional_significance_level=args.directional_alpha,
+            directional_confidence_level=args.confidence_level,
+            min_directional_changes=args.min_directional_changes,
         ),
     )
     target = Path(args.output)

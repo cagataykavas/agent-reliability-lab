@@ -42,6 +42,7 @@ This repository turns those questions into executable evaluation contracts.
 | Reports | machine-readable JSON and standalone responsive HTML |
 | CI gate | configurable minimum suite pass rate and non-zero failure exit |
 | Regression analysis | paired baseline/candidate deltas with case-level regression detection |
+| Paired uncertainty | Wilson interval and exact one-sided sign test over changed case directions |
 | Fault injection | seven deterministic corruption modes for evaluation-suite validation |
 | Portability | dependency-free core, installable CLI, Docker image, Python 3.11–3.13 CI |
 | Run registry | immutable UUID runs, dataset fingerprints and SQLite persistence |
@@ -204,10 +205,19 @@ Compare candidate traces against an approved baseline:
 agent-reliability-compare \
   examples/cases.jsonl \
   examples/traces.jsonl \
-  artifacts/faulty-traces.jsonl
+  artifacts/faulty-traces.jsonl \
+  --directional-alpha 0.05 \
+  --min-directional-changes 5
 ```
 
 The comparison fails with a non-zero exit when the candidate omits baseline cases, exceeds allowed mean/pass-rate drops or regresses more individual cases than policy permits. This makes agent behavior a reviewable CI release gate rather than a dashboard someone may or may not inspect.
+
+Every comparison also reports paired directional evidence across shared cases. Unchanged score
+ties are excluded; the remaining regressions and improvements produce a Wilson interval for the
+regression share and an exact one-sided sign-test p-value. Setting `--directional-alpha` adds a
+gate only when the configured minimum number of changed cases is available. This evidence
+complements the deterministic release thresholds—it does not turn a curated benchmark into a
+random population sample or prove that a non-significant candidate is equivalent.
 
 ## Evaluation service and run registry
 
@@ -297,7 +307,7 @@ These limits are explicit because reliable evaluation requires knowing exactly w
 - provider/framework trace adapters;
 - trajectory perturbation and fault injection;
 - pairwise candidate comparison;
-- statistical confidence intervals and regression significance;
+- resampling-based score-delta intervals for large evaluation suites;
 - OpenTelemetry-compatible span ingestion;
 - FastAPI evaluation service and run registry;
 - benchmark history dashboard;
