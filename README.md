@@ -292,6 +292,14 @@ tests/            scoring, validation and reporting regression tests
 
 These limits are explicit because reliable evaluation requires knowing exactly what a metric does—and what it does not prove.
 
+## Evaluator agreement gate
+
+`agent-reliability-agreement` checks whether categorical labels are reliable enough to support an
+agent release decision. It evaluates every rater pair for shared-case coverage, overlap and Cohen's
+kappa, and fails closed when identical single-label judgments make kappa undefined. See
+[`docs/evaluator-agreement-gate.md`](docs/evaluator-agreement-gate.md) for the evidence contract and
+limitations.
+
 ## Roadmap
 
 - provider/framework trace adapters;
