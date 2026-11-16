@@ -46,6 +46,7 @@ This repository turns those questions into executable evaluation contracts.
 | Portability | dependency-free core, installable CLI, Docker image, Python 3.11–3.13 CI |
 | Run registry | immutable UUID runs, dataset fingerprints and SQLite persistence |
 | Evaluation API | FastAPI create/list/detail endpoints with validated request contracts |
+| Tool evolution | Fail-closed backward-compatibility gate for versioned agent tool manifests |
 
 ## Architecture
 
@@ -102,6 +103,29 @@ Run the same benchmark without installing a console script:
 ```bash
 python -m agent_reliability examples/cases.jsonl examples/traces.jsonl
 ```
+
+## Tool schema compatibility gate
+
+Agent evaluations can stay green while a deployment breaks recorded or retried tool calls. The
+compatibility command checks that every input accepted by a baseline manifest remains accepted by
+the candidate:
+
+```bash
+agent-reliability-tool-compat baseline-tools.json candidate-tools.json \
+  --output artifacts/tool-compatibility.json
+```
+
+It returns `0` for a compatible candidate, `1` for detected breaking changes, and `2` for an
+invalid or unsupported manifest. Breaking changes include removed tools or properties, newly
+required fields, narrowed types or enums, closed objects, and tightened numeric, string, or array
+bounds. Reports include canonical SHA-256 digests for both inputs so CI evidence identifies the
+exact contracts that were checked.
+
+The checker intentionally accepts a bounded JSON Schema subset: scalar `type`, object properties,
+required fields, boolean `additionalProperties`, homogeneous array items, enum/const, and basic
+bounds. Unsupported composition or reference keywords such as `$ref`, `oneOf`, and `anyOf` fail
+validation instead of producing a potentially misleading compatibility result. This is an input
+acceptance check; it does not prove tool implementation or response compatibility.
 
 ## Evaluation contract
 
