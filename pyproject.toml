@@ -27,6 +27,7 @@ dev = ["pytest>=8.0", "ruff>=0.6", "httpx>=0.27", "fastapi>=0.115"]
 agent-reliability = "agent_reliability.cli:main"
 agent-reliability-compare = "agent_reliability.compare_cli:main"
 agent-reliability-inject = "agent_reliability.inject_cli:main"
+agent-reliability-overlap = "agent_reliability.overlap:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

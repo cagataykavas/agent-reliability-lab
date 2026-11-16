@@ -43,6 +43,7 @@ This repository turns those questions into executable evaluation contracts.
 | CI gate | configurable minimum suite pass rate and non-zero failure exit |
 | Regression analysis | paired baseline/candidate deltas with case-level regression detection |
 | Fault injection | seven deterministic corruption modes for evaluation-suite validation |
+| Benchmark leakage | bounded exact and near-duplicate audits across evaluation splits |
 | Portability | dependency-free core, installable CLI, Docker image, Python 3.11–3.13 CI |
 | Run registry | immutable UUID runs, dataset fingerprints and SQLite persistence |
 | Evaluation API | FastAPI create/list/detail endpoints with validated request contracts |
@@ -209,6 +210,31 @@ agent-reliability-compare \
 
 The comparison fails with a non-zero exit when the candidate omits baseline cases, exceeds allowed mean/pass-rate drops or regresses more individual cases than policy permits. This makes agent behavior a reviewable CI release gate rather than a dashboard someone may or may not inspect.
 
+## Benchmark overlap gate
+
+Quality gates can look healthier than they are when held-out cases repeat prompts from a
+reference, tuning or training split. Audit two JSONL case sets before accepting benchmark
+results:
+
+```bash
+agent-reliability-overlap \
+  benchmarks/reference.jsonl \
+  benchmarks/held-out.jsonl \
+  --similarity-threshold 0.8 \
+  --max-overlaps 0
+```
+
+The audit normalizes Unicode and formatting, detects case-ID collisions, exact prompt
+matches and token-set near duplicates, then emits a deterministic JSON report. Exit `0`
+admits the split, `2` denies it, and `1` reports invalid input or an unsafe workload. The
+cross-product is bounded to one million comparisons by default and reported findings are
+capped at 100 while preserving the true overlap count.
+
+Lexical similarity is intentionally transparent rather than a semantic claim. Paraphrases
+with little token overlap can pass, while templated cases may need a reviewed non-zero
+allowance. The next layer should combine this gate with provenance for how benchmark cases
+were sourced and transformed.
+
 ## Evaluation service and run registry
 
 Install the optional service dependencies and start the API:
@@ -274,6 +300,7 @@ src/agent_reliability/
   scoring.py      deterministic component scoring and suite aggregation
   io.py           validated JSONL loading with line-level diagnostics
   reporting.py    JSON and standalone HTML report generation
+  overlap.py      bounded cross-split benchmark leakage audit
   registry.py     SQLite run history and canonical dataset fingerprints
   api.py          FastAPI evaluation and run-query service
   cli.py          command-line quality gate
