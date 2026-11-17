@@ -43,6 +43,7 @@ This repository turns those questions into executable evaluation contracts.
 | CI gate | configurable minimum suite pass rate and non-zero failure exit |
 | Regression analysis | paired baseline/candidate deltas with case-level regression detection |
 | Fault injection | seven deterministic corruption modes for evaluation-suite validation |
+| Progress liveness | fail-closed state/action loop budgets with deterministic evidence |
 | Portability | dependency-free core, installable CLI, Docker image, Python 3.11–3.13 CI |
 | Run registry | immutable UUID runs, dataset fingerprints and SQLite persistence |
 | Evaluation API | FastAPI create/list/detail endpoints with validated request contracts |
@@ -209,6 +210,31 @@ agent-reliability-compare \
 
 The comparison fails with a non-zero exit when the candidate omits baseline cases, exceeds allowed mean/pass-rate drops or regresses more individual cases than policy permits. This makes agent behavior a reviewable CI release gate rather than a dashboard someone may or may not inspect.
 
+## Progress-loop audit
+
+Correct tool selection does not prove that a live agent will terminate. A runner can
+repeat the same action, revisit an earlier state, or continue emitting events after
+it has declared a terminal outcome. Record privacy-reduced SHA-256 digests for the
+action and resulting state at every step, then run:
+
+```bash
+agent-reliability-progress examples/progress_trace.json \
+  --output artifacts/progress-audit.json
+```
+
+The audit enforces total-step, consecutive no-progress, repeated action/state, and
+state-visit budgets. It also requires contiguous sequencing and a final terminal
+event. Inputs are bounded strict JSON; duplicate fields, non-finite values,
+symlinks, malformed digests, and ambiguous terminal histories fail closed. Reports
+contain only digests, counts, policy identity, and stable reason codes—not raw
+prompts, tool arguments, observations, or run identifiers.
+
+State/action digests are evidence identifiers, not proof that the recorder is
+honest or that two semantically equivalent states hash alike. They are not
+confidentiality controls; low-entropy inputs remain guessable offline. The runtime
+should reserve the same limits before execution and stop work as the admitted
+envelope is reached; this offline audit detects violations after recording.
+
 ## Evaluation service and run registry
 
 Install the optional service dependencies and start the API:
@@ -274,6 +300,7 @@ src/agent_reliability/
   scoring.py      deterministic component scoring and suite aggregation
   io.py           validated JSONL loading with line-level diagnostics
   reporting.py    JSON and standalone HTML report generation
+  progress.py     bounded agent progress and loop audit
   registry.py     SQLite run history and canonical dataset fingerprints
   api.py          FastAPI evaluation and run-query service
   cli.py          command-line quality gate

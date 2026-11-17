@@ -1,0 +1,30 @@
+{
+  "schema_version": "agent-progress/v1",
+  "run_id": "synthetic-refund-run",
+  "steps": [
+    {
+      "sequence": 1,
+      "kind": "model",
+      "action_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "state_sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+      "sequence": 2,
+      "kind": "tool",
+      "action_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "state_sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    {
+      "sequence": 3,
+      "kind": "model",
+      "action_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "state_sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "sequence": 4,
+      "kind": "final",
+      "action_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "state_sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+    }
+  ]
+}

@@ -33,6 +33,8 @@ jobs:
             echo "Expected the regression gate to reject fault-injected traces"
             exit 1
           fi
+      - name: Verify progress-loop audit
+        run: agent-reliability-progress examples/progress_trace.json --output artifacts/progress-audit.json
       - uses: actions/upload-artifact@v4
         if: matrix.python-version == '3.12'
         with:
