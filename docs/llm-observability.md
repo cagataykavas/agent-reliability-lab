@@ -40,13 +40,15 @@ A trace summary derives:
 - total request cost;
 - prompt versions observed in the trace.
 
+Before deriving those values, the summarizer rejects duplicate span IDs, invalid time ranges, unsupported status values, negative or non-finite cost, and non-integer or negative token counts. Invalid usage attributes are not silently replaced with zero: malformed telemetry cannot make a candidate appear cheaper or healthier than its evidence supports. SLO evaluation also requires unique trace IDs, finite non-negative latency/cost summaries, and valid target ranges.
+
 This split is useful because an agent request can fail in several independent layers: model invocation, retrieval, tool execution, policy checks or downstream dependencies.
 
 ## Redaction policy
 
 Telemetry frequently contains more sensitive data than application developers expect. Prompts, completions, HTTP headers, user identifiers and tool arguments can all carry PII or credentials.
 
-The Python redaction helper recursively removes values based on exact keys and configurable key fragments. The Collector example additionally deletes common sensitive attributes before telemetry is exported.
+The Python redaction helper recursively removes values based on exact keys and configurable key fragments. A narrow safe-metric allowlist preserves the numeric `llm.usage.input_tokens`, `llm.usage.output_tokens`, and `llm.cost.usd` fields even though credential-oriented keys containing `token` remain redacted. The Collector example additionally deletes common sensitive attributes before telemetry is exported.
 
 A production policy should be stricter:
 

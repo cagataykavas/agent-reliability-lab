@@ -36,6 +36,7 @@ This repository turns those questions into executable evaluation contracts.
 | Evidence grounding | required evidence-ID coverage independent from answer fluency |
 | Answer contract | case-insensitive required-fact coverage for deterministic smoke checks |
 | Operational budgets | per-case latency and cost ceilings |
+| Telemetry integrity | fail-closed span, usage, cost and SLO-input validation |
 | Human review | expected-vs-observed escalation correctness |
 | Failure taxonomy | ten structured failure categories with readable diagnostics |
 | Missing data | explicit failed result for a missing trace; unknown/duplicate IDs rejected |
