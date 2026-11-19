@@ -2,7 +2,7 @@
 
 This repository now includes a small, framework-neutral reference layer for reasoning about LLM/agent telemetry before wiring it to a production backend.
 
-The goal is not to claim production-scale SRE experience. The goal is to make the reliability concerns executable: trace aggregation, token/cost accounting, PII redaction, SLO evaluation, deterministic export identity and collector configuration.
+The goal is not to claim production-scale SRE experience. The goal is to make the reliability concerns executable: trace aggregation, token/cost accounting, PII redaction, SLO evaluation, deterministic export identity, exporter/source provenance and collector configuration.
 
 ## Reference architecture
 
@@ -107,15 +107,25 @@ During an incident, first identify which dimension regressed, then use trace cor
 
 `trace_fingerprint()` creates a deterministic hash from a trace summary. This can be used as an idempotency key when exporting trace/evaluation/cost metadata into an analytics sink.
 
-The fingerprint is not a security primitive and should not replace backend uniqueness constraints. In a real pipeline the sink should enforce a stable key such as `(trace_id, exporter_version)` or an equivalent domain-specific identity.
+The fingerprint covers every summary field and is not a security primitive. It should not replace backend uniqueness constraints. In a real pipeline the sink should enforce a stable key such as `(trace_id, exporter_version)` or an equivalent domain-specific identity.
+
+## Manifest admission and provider reconciliation
+
+`telemetry_manifest.build_manifest()` produces a canonical evidence manifest containing the sorted trace fingerprints, aggregate token/cost values, exporter identity and an exact 40-character source revision. `admit_manifest()` validates every summary field, rejects duplicate traces or non-canonical metadata, recomputes the complete evidence set and emits an aggregate-only receipt.
+
+An independently obtained `ProviderUsage` record can be supplied at admission. Token and cost totals must exactly match the accepted trace evidence; a mismatch fails closed rather than allowing incomplete exporter telemetry to make a run appear cheaper. Receipt digests are stable across input order and contain no trace IDs, prompts, span payloads or provider response data.
+
+This boundary establishes internal consistency, not authenticity. Production exporters should sign the canonical manifest with a workload identity or KMS-backed key, pin approved exporter versions, and fetch provider usage from an independently authenticated billing or usage API. Exact cost comparison assumes the exporter and provider use the same reviewed rounding policy.
 
 ## Files
 
 ```text
 src/agent_reliability/telemetry.py   span summaries, redaction, SLOs, fingerprinting
+src/agent_reliability/telemetry_manifest.py  manifest admission and provider reconciliation
 observability/otel-collector.yaml    OTLP ingestion, redaction, batching and fan-out
 observability/prometheus-rules.yaml  recording rules and example SLO alerts
 tests/test_telemetry.py              regression tests for telemetry primitives
+tests/test_telemetry_manifest.py     provenance and aggregate-reconciliation tests
 ```
 
 Everything in this repository uses synthetic metadata and reference configuration. No production prompts, customer data or employer telemetry are included.

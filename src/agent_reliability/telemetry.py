@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field
@@ -242,17 +243,11 @@ def evaluate_slos(
 
 
 def trace_fingerprint(summary: TraceSummary) -> str:
-    payload = "|".join(
-        (
-            summary.trace_id,
-            f"{summary.latency_ms:.6f}",
-            str(summary.span_count),
-            str(summary.error_count),
-            str(summary.input_tokens),
-            str(summary.output_tokens),
-            f"{summary.total_cost_usd:.8f}",
-            ",".join(summary.prompt_versions),
-        )
+    payload = json.dumps(
+        asdict(summary),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
     )
     return sha256(payload.encode("utf-8")).hexdigest()
 

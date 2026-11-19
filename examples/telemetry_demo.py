@@ -4,6 +4,7 @@ from dataclasses import asdict
 from pprint import pprint
 
 from agent_reliability.telemetry import LLMSpan, SLOTarget, evaluate_slos, summarize_trace
+from agent_reliability.telemetry_manifest import ProviderUsage, admit_manifest, build_manifest
 
 
 def main() -> None:
@@ -47,6 +48,21 @@ def main() -> None:
         [summary],
         SLOTarget(availability=0.99, p95_latency_ms=2_000, max_mean_cost_usd=0.03),
     )
+    manifest = build_manifest(
+        [summary],
+        exporter_name="demo-otel-exporter",
+        exporter_version="1.0.0",
+        source_revision="b" * 40,
+    )
+    receipt = admit_manifest(
+        [summary],
+        manifest,
+        provider_usage=ProviderUsage(
+            input_tokens=310,
+            output_tokens=92,
+            total_cost_usd=0.011,
+        ),
+    )
 
     print("Sanitized root attributes:")
     pprint(dict(sanitized[0].attributes))
@@ -54,6 +70,8 @@ def main() -> None:
     pprint(asdict(summary))
     print("\nSLO evaluation:")
     pprint(asdict(slo))
+    print("\nTelemetry admission receipt:")
+    pprint(asdict(receipt))
 
 
 if __name__ == "__main__":
